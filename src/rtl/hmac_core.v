@@ -39,8 +39,12 @@ module hmac_core(
                  input reg             clk,
                  input reg             reset_n,
 
+                 input reg             init,
+                 input reg             next,
+                 input reg             finalize,
+                 input reg [5 : 0]     final_len,
+
                  input reg [255 : 0]   key,
-                 input reg             keylen,
 
                  input reg [511 : 0]   block,
 
