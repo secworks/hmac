@@ -113,11 +113,11 @@ module hmac_core(
 
       if (!reset_n)
         begin
-          for (i = 0 ; i < 16 ; i = i + 1)
 
         end
       else
         begin
+
         end
     end // reg_update
 

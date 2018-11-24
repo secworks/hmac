@@ -36,8 +36,8 @@
 #
 #===================================================================
 
-SHA_PATH = ../../sha256
-SHA_SRC = $(SHA_PATH)/sha256_core.v $(SHA_PATH)/sha256_k_constants.v $(SHA_PATH)/sha256_w_mem.v
+SHA_PATH = ../../sha256/src/rtl/
+SHA_SRC = $(SHA_PATH)sha256_core.v $(SHA_PATH)sha256_k_constants.v $(SHA_PATH)sha256_w_mem.v
 
 CORE_SRC = ../src/rtl/hmac_core.v $(SHA_SRC)
 CORE_TB_SRC = ../src/tb/tb_hmac_core.v
