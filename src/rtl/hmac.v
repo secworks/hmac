@@ -2,12 +2,12 @@
 //
 // hmac.v
 // ------
-// Top level wrapper for the SHA-256 hash function providing
-// a simple memory like interface with 32 bit data access.
+// Top level wrapper for the HMAC core providing a simple memory
+// like interface with 32 bit data access.
 //
 //
 // Author: Joachim Strombergson
-// Copyright (c) 2013, 201, Secworks Sweden AB
+// Copyright (c) 2018 Assured AB
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or
@@ -49,8 +49,7 @@ module hmac(
             // Data ports.
             input wire  [7 : 0]  address,
             input wire  [31 : 0] write_data,
-            output wire [31 : 0] read_data,
-            output wire          error
+            output wire [31 : 0] read_data
            );
 
   //----------------------------------------------------------------
@@ -67,17 +66,21 @@ module hmac(
 
   localparam ADDR_STATUS      = 8'h09;
   localparam STATUS_READY_BIT = 0;
-  localparam STATUS_VALID_BIT = 1;
 
-  localparam ADDR_BLOCK0    = 8'h10;
-  localparam ADDR_BLOCK15   = 8'h1f;
+  localparam ADDR_FINAL_LEN   = 8'h0a;
 
-  localparam ADDR_DIGEST0   = 8'h20;
-  localparam ADDR_DIGEST7   = 8'h27;
+  localparam ADDR_BLOCK0      = 8'h10;
+  localparam ADDR_BLOCK15     = 8'h1f;
 
-  localparam CORE_NAME0     = 32'h73686132; // "sha2"
-  localparam CORE_NAME1     = 32'h2d323536; // "-256"
-  localparam CORE_VERSION   = 32'h312e3830; // "1.80"
+  localparam ADDR_KEY0        = 8'h20;
+  localparam ADDR_KEY7        = 8'h27;
+
+  localparam ADDR_TAG0        = 8'h40;
+  localparam ADDR_TAG3        = 8'h43;
+
+  localparam CORE_NAME0       = 32'h73686132; // "sha2"
+  localparam CORE_NAME1       = 32'h2d323536; // "-256"
+  localparam CORE_VERSION     = 32'h312e3830; // "1.80"
 
 
   //----------------------------------------------------------------
@@ -89,29 +92,28 @@ module hmac(
   reg next_reg;
   reg next_new;
 
-  reg final_reg;
-  reg final_new;
+  reg finalize_reg;
+  reg finalize_new;
 
-  reg ready_reg;
+  reg [5 : 0] final_len_reg;
+  reg         final_len_we;
+
+  reg [31 : 0] key_reg [0 : 7];
+  reg          key_we;
 
   reg [31 : 0] block_reg [0 : 15];
   reg          block_we;
-
-  reg [127 : 0] tag_reg;
-
-  reg digest_valid_reg;
 
 
   //----------------------------------------------------------------
   // Wires.
   //----------------------------------------------------------------
-  wire           core_ready;
+  wire [255 : 0] core_key;
   wire [511 : 0] core_block;
-  wire [255 : 0] core_tag;
-  wire           core_tag_valid;
+  wire           core_ready;
+  wire [127 : 0] core_tag;
 
   reg [31 : 0]   tmp_read_data;
-  reg            tmp_error;
 
 
   //----------------------------------------------------------------
@@ -122,28 +124,31 @@ module hmac(
                        block_reg[08], block_reg[09], block_reg[10], block_reg[11],
                        block_reg[12], block_reg[13], block_reg[14], block_reg[15]};
 
+  assign core_key = {key_reg[00], key_reg[01], key_reg[02], key_reg[03],
+                     key_reg[04], key_reg[05], key_reg[06], key_reg[07]};
+
   assign read_data = tmp_read_data;
-  assign error     = tmp_error;
 
 
   //----------------------------------------------------------------
   // core instantiation.
   //----------------------------------------------------------------
-  sha256_core core(
-                   .clk(clk),
-                   .reset_n(reset_n),
+  hmac_core core(
+                 .clk(clk),
+                 .reset_n(reset_n),
 
-                   .init(init_reg),
-                   .next(next_reg),
-                   .finalize(finalize_reg),
+                 .init(init_reg),
+                 .next(next_reg),
+                 .finalize(finalize_reg),
+                 .final_len(final_len_reg),
 
-                   .block(core_block),
+                 .key(core_key),
 
-                   .ready(core_ready),
+                 .block(core_block),
 
-                   .digest(core_digest),
-                   .digest_valid(core_digest_valid)
-                  );
+                 .ready(core_ready),
+                 .tag(core_tag)
+                );
 
 
   //----------------------------------------------------------------
@@ -162,25 +167,25 @@ module hmac(
           for (i = 0 ; i < 16 ; i = i + 1)
             block_reg[i] <= 32'h0;
 
-          init_reg         <= 0;
-          next_reg         <= 0;
-          ready_reg        <= 0;
-          mode_reg         <= MODE_SHA_256;
-          digest_reg       <= 256'h0;
-          digest_valid_reg <= 0;
+          for (i = 0 ; i < 8 ; i = i + 1)
+            key_reg[i] <= 32'h0;
+
+          init_reg      <= 1'h0;
+          next_reg      <= 1'h0;
+          finalize_reg  <= 1'h0;
+          final_len_reg <= 6'h0;
         end
       else
         begin
-          ready_reg        <= core_ready;
-          digest_valid_reg <= core_digest_valid;
-          init_reg         <= init_new;
-          next_reg         <= next_new;
+          init_reg     <= init_new;
+          next_reg     <= next_new;
+          finalize_reg <= finalize_new;
 
-          if (mode_we)
-            mode_reg <= mode_new;
+          if (final_len_we)
+            final_len_reg <= write_data[5 : 0];
 
-          if (core_digest_valid)
-            digest_reg <= core_digest;
+          if (key_we)
+            key_reg[address[3 : 0]] <= write_data;
 
           if (block_we)
             block_reg[address[3 : 0]] <= write_data;
@@ -198,11 +203,11 @@ module hmac(
     begin : api_logic
       init_new      = 0;
       next_new      = 0;
-      mode_new      = 0;
-      mode_we       = 0;
+      finalize_new  = 0;
+      final_len_we  = 0;
+      key_we        = 0;
       block_we      = 0;
       tmp_read_data = 32'h0;
-      tmp_error     = 0;
 
       if (cs)
         begin
@@ -210,11 +215,16 @@ module hmac(
             begin
               if (address == ADDR_CTRL)
                 begin
-                  init_new = write_data[CTRL_INIT_BIT];
-                  next_new = write_data[CTRL_NEXT_BIT];
-                  mode_new = write_data[CTRL_MODE_BIT];
-                  mode_we  = 1;
+                  init_new     = write_data[CTRL_INIT_BIT];
+                  next_new     = write_data[CTRL_NEXT_BIT];
+                  finalize_new = write_data[CTRL_FINAL_BIT];
                 end
+
+              if (address == ADDR_FINAL_LEN)
+                final_len_we = 1;
+
+              if ((address >= ADDR_KEY0) && (address <= ADDR_KEY7))
+                block_we = 1;
 
               if ((address >= ADDR_BLOCK0) && (address <= ADDR_BLOCK15))
                 block_we = 1;
@@ -222,11 +232,8 @@ module hmac(
 
           else
             begin
-              if ((address >= ADDR_BLOCK0) && (address <= ADDR_BLOCK15))
-                tmp_read_data = block_reg[address[3 : 0]];
-
-              if ((address >= ADDR_DIGEST0) && (address <= ADDR_DIGEST7))
-                tmp_read_data = digest_reg[(7 - (address - ADDR_DIGEST0)) * 32 +: 32];
+              if ((address >= ADDR_TAG0) && (address <= ADDR_TAG3))
+                tmp_read_data = core_tag[(3 - (address - ADDR_TAG0)) * 32 +: 32];
 
               case (address)
                 // Read operations.
@@ -239,11 +246,8 @@ module hmac(
                 ADDR_VERSION:
                   tmp_read_data = CORE_VERSION;
 
-                ADDR_CTRL:
-                  tmp_read_data = {29'h0, mode_reg, next_reg, init_reg};
-
                 ADDR_STATUS:
-                  tmp_read_data = {30'h0, digest_valid_reg, ready_reg};
+                  tmp_read_data = {31'h0, core_ready};
 
                 default:
                   begin
@@ -252,8 +256,8 @@ module hmac(
             end
         end
     end // addr_decoder
-endmodule // sha256
+endmodule // hmac
 
 //======================================================================
-// EOF sha256.v
+// EOF hmac.v
 //======================================================================

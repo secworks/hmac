@@ -36,17 +36,17 @@
 //======================================================================
 
 module hmac_core(
-                 input reg             clk,
-                 input reg             reset_n,
+                 input wire            clk,
+                 input wire            reset_n,
 
-                 input reg             init,
-                 input reg             next,
-                 input reg             finalize,
-                 input reg [5 : 0]     final_len,
+                 input wire            init,
+                 input wire            next,
+                 input wire            finalize,
+                 input wire [5 : 0]    final_len,
 
-                 input reg [255 : 0]   key,
+                 input wire [255 : 0]  key,
 
-                 input reg [511 : 0]   block,
+                 input wire [511 : 0]  block,
 
                  output wire           ready,
                  output wire [127 : 0] tag
@@ -69,7 +69,6 @@ module hmac_core(
   //----------------------------------------------------------------
   reg            sha256_init;
   reg            sha256_next;
-  reg            sha256_mode;
   reg  [511 : 0] sha256_block;
   wire           sha256_ready;
   wire [255 : 0] sha256_digest;
