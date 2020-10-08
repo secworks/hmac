@@ -73,10 +73,10 @@ module hmac(
   localparam ADDR_BLOCK15     = 8'h1f;
 
   localparam ADDR_KEY0        = 8'h20;
-  localparam ADDR_KEY7        = 8'h27;
+  localparam ADDR_KEY15       = 8'h2f;
 
   localparam ADDR_TAG0        = 8'h40;
-  localparam ADDR_TAG3        = 8'h43;
+  localparam ADDR_TAG7        = 8'h47;
 
   localparam CORE_NAME0       = 32'h73686132; // "sha2"
   localparam CORE_NAME1       = 32'h2d323536; // "-256"
@@ -98,7 +98,7 @@ module hmac(
   reg [5 : 0] final_len_reg;
   reg         final_len_we;
 
-  reg [31 : 0] key_reg [0 : 7];
+  reg [31 : 0] key_reg [0 : 15];
   reg          key_we;
 
   reg [31 : 0] block_reg [0 : 15];
