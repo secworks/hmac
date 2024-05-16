@@ -73,7 +73,7 @@ module hmac(
   localparam ADDR_BLOCK15     = 8'h1f;
 
   localparam ADDR_KEY0        = 8'h20;
-  localparam ADDR_KEY15       = 8'h2f;
+  localparam ADDR_KEY7        = 8'h27;
 
   localparam ADDR_TAG0        = 8'h40;
   localparam ADDR_TAG7        = 8'h47;
